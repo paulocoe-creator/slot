@@ -275,6 +275,10 @@ impl Compositor {
         self.game.set_source_rect(rect);
     }
 
+    pub fn set_game_picture_fits_panel(&mut self, on: bool) {
+        self.game.set_picture_fits_panel(on);
+    }
+
     pub fn set_shake(&mut self, dx: f32) {
         self.shake = dx;
     }

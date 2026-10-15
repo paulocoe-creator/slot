@@ -1380,6 +1380,10 @@ impl App {
         video_mode::source_rect(self.platform, self.video_mode)
     }
 
+    pub fn picture_fits_panel(&self) -> bool {
+        video_mode::fits_panel(self.platform, self.video_mode)
+    }
+
     fn slot_owns_the_shoulders(&self) -> bool {
         matches!(self.phase, Phase::Playing { .. }) && self.platform != Platform::Gba
     }

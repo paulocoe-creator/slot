@@ -1823,7 +1823,8 @@ fn session_playing(root: &Path) -> Session {
     s
 }
 
-const GB_WINDOW: [f32; 4] = [40.0 / 240.0, 0.0, 160.0 / 240.0, 1.0];
+const GB_ACTUAL: [f32; 4] = [40.0 / 240.0, 8.0 / 160.0, 160.0 / 240.0, 144.0 / 160.0];
+const GB_STRETCH: [f32; 4] = [40.0 / 240.0, 0.0, 160.0 / 240.0, 1.0];
 
 fn pad(s: &Session) -> u16 {
     s.emu().expect("no core in the slot").input().0
@@ -1835,25 +1836,29 @@ fn l_and_r_change_the_mode_on_a_game_boy_cart_and_not_on_a_gba_one() {
     let mut s = session_playing(d.path());
     assert_eq!(
         s.app().source_rect(),
-        WHOLE_TEXTURE,
+        GB_ACTUAL,
         "it did not open actual size"
+    );
+    assert!(
+        s.app().picture_fits_panel(),
+        "actual GB picture did not preserve its shape"
     );
 
     s.feed([RawEvent::Down(Btn::L1)], 100);
     assert_eq!(
         s.app().source_rect(),
-        GB_WINDOW,
+        GB_STRETCH,
         "L did not stretch the picture"
+    );
+    assert!(
+        !s.app().picture_fits_panel(),
+        "stretch unexpectedly preserved the picture shape"
     );
     assert_eq!(pad(&s) & ButtonMask::L, 0, "L reached the game as well");
     s.feed([RawEvent::Up(Btn::L1)], 120);
 
     s.feed([RawEvent::Down(Btn::R1)], 200);
-    assert_eq!(
-        s.app().source_rect(),
-        WHOLE_TEXTURE,
-        "R did not give it back"
-    );
+    assert_eq!(s.app().source_rect(), GB_ACTUAL, "R did not give it back");
     assert_eq!(pad(&s) & ButtonMask::R, 0, "R reached the game as well");
     s.feed([RawEvent::Up(Btn::R1)], 220);
 
@@ -1950,12 +1955,12 @@ fn the_picture_mode_is_remembered_per_cart() {
     let mut s = session_playing(d.path());
     assert_eq!(
         s.app().source_rect(),
-        GB_WINDOW,
+        GB_STRETCH,
         "the cart did not come back stretched"
     );
     s.feed([RawEvent::Down(Btn::R1)], 100);
     assert_eq!(video_mode_for(d.path(), "Tetris"), VideoMode::Actual);
-    assert_eq!(s.app().source_rect(), WHOLE_TEXTURE);
+    assert_eq!(s.app().source_rect(), GB_ACTUAL);
 }
 
 #[test]
@@ -1970,7 +1975,7 @@ fn a_cart_with_no_line_reads_as_actual_size() {
     let s = session_playing(d.path());
     assert_eq!(
         s.app().source_rect(),
-        WHOLE_TEXTURE,
+        GB_ACTUAL,
         "a cart with no line did not open at actual size"
     );
 }
