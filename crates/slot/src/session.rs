@@ -11,7 +11,6 @@ pub const RUMBLE_MAX_MS: Millis = 150;
 
 use crate::app::{App, Phase};
 use crate::audio::{opened_sink, AudioSink, Ring, Sfx};
-use crate::core::open_core;
 use crate::emu::{CoreState, EmuHandle, Speed};
 use crate::frames::FrameRef;
 use crate::input::Pad;
@@ -263,6 +262,15 @@ impl Session {
                 }
             }
         }
+        if let Some(blending) = self.app.take_frame_blending() {
+            if let Some((key, value)) =
+                crate::core::frame_blending_option(self.app.core(), blending)
+            {
+                if let Some(emu) = &self.emu {
+                    emu.set_option(key, value);
+                }
+            }
+        }
         if recoloured && self.held() && !self.app.link_active() {
             if let Some(emu) = &self.emu {
                 emu.refresh();
@@ -479,12 +487,13 @@ impl Session {
         let player = self.app.link_player();
         let palette = crate::core::palette_for(self.app.gb_palette(), platform, &rom, player);
         self.app.set_palette_live(palette.is_some());
-        let opened = open_core(
+        let opened = crate::core::open_core_with_blending(
             &self.root,
             core,
             platform,
             serial,
             self.app.colour_correction_for(platform),
+            self.app.frame_blending_for(platform),
             palette,
             player,
         );

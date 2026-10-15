@@ -7,8 +7,8 @@ use common::{
 use slot::app::{App, Phase};
 use slot_input::{Action, Btn};
 use slot_store::{
-    read_slot_state, write_slot_state, Appearance, BezelPick, Platform, Shader, SlotState,
-    WallpaperPick,
+    read_slot_state, write_slot_state, Appearance, BezelPick, FrameBlending, Platform, Shader,
+    SlotState, WallpaperPick,
 };
 use slot_ui::{
     Draw, Icon, QuickMenuFaces, QuickRow, QuickValue, TexId, MENU_PAD, OUT_W, QUICK_EDGE,
@@ -399,6 +399,7 @@ fn screen_opens_a_page_of_its_own_and_b_comes_back_to_it() {
     assert_eq!(a.quick_menu(), Some(QuickRow::GbShader));
     for want in [
         QuickRow::GbColourCorrection,
+        QuickRow::GbFrameBlending,
         QuickRow::GbPalettes,
         QuickRow::GbBezel,
         QuickRow::GbShader,
@@ -465,6 +466,43 @@ fn each_platform_keeps_its_own_shader_wraps_and_starts_on_grid_and_simpletex() {
         (s.shader_gba, s.shader_gb, s.shader_gbc),
         (Shader::Off, Shader::Grid, Shader::Off)
     );
+}
+
+#[test]
+fn each_platform_keeps_its_own_frame_blending_setting() {
+    let (d, mut a, _) = on_carousel();
+    for (row, value, saved) in [
+        (
+            QuickRow::GbaFrameBlending,
+            QuickValue::Smart,
+            FrameBlending::Smart,
+        ),
+        (
+            QuickRow::GbFrameBlending,
+            QuickValue::Ghosting,
+            FrameBlending::GhostingFast,
+        ),
+        (
+            QuickRow::GbcFrameBlending,
+            QuickValue::Ghosting,
+            FrameBlending::GhostingFast,
+        ),
+    ] {
+        open_at(&mut a, row);
+        assert_eq!(a.quick_value(row), Some(QuickValue::Off));
+        press(&mut a, Btn::Right);
+        assert_eq!(a.quick_value(row), Some(value));
+        let state = read_slot_state(d.path());
+        let got = match row {
+            QuickRow::GbaFrameBlending => state.frame_blending_gba,
+            QuickRow::GbFrameBlending => state.frame_blending_gb,
+            _ => state.frame_blending_gbc,
+        };
+        assert_eq!(got, saved);
+        while a.quick_menu().is_some() {
+            press(&mut a, Btn::B);
+        }
+    }
 }
 
 #[test]

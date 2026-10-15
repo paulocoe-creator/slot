@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use slot_retro::{LibretroCore, MockCore, RetroCore};
-use slot_store::{Core, GbPalette, Platform};
+use slot_store::{Core, FrameBlending, GbPalette, Platform};
 
 use crate::root;
 
@@ -46,8 +46,40 @@ pub fn open_core(
     palette: Option<GbPalette>,
     link: Option<u8>,
 ) -> Opened {
+    open_core_with_blending(
+        root,
+        core,
+        platform,
+        serial,
+        colour,
+        FrameBlending::Off,
+        palette,
+        link,
+    )
+}
+
+pub fn open_core_with_blending(
+    root: &Path,
+    core: Core,
+    platform: Platform,
+    serial: &str,
+    colour: bool,
+    frame_blending: FrameBlending,
+    palette: Option<GbPalette>,
+    link: Option<u8>,
+) -> Opened {
     let paths = candidates(root, core);
-    match open_named(root, core, platform, serial, colour, palette, link, &paths) {
+    match open_named(
+        root,
+        core,
+        platform,
+        serial,
+        colour,
+        frame_blending,
+        palette,
+        link,
+        &paths,
+    ) {
         Some(core) => Opened { core, named: true },
         None => {
             report_missing(core, &paths);
@@ -78,7 +110,18 @@ pub fn open_core_for_palette(
     palette: Option<GbPalette>,
     paths: &[PathBuf],
 ) -> Box<dyn RetroCore> {
-    open_named(root, core, platform, serial, colour, palette, None, paths).unwrap_or_else(|| {
+    open_named(
+        root,
+        core,
+        platform,
+        serial,
+        colour,
+        FrameBlending::Off,
+        palette,
+        None,
+        paths,
+    )
+    .unwrap_or_else(|| {
         report_missing(core, paths);
         Box::new(MockCore::new())
     })
@@ -91,6 +134,7 @@ fn open_named(
     platform: Platform,
     serial: &str,
     colour: bool,
+    frame_blending: FrameBlending,
     palette: Option<GbPalette>,
     link: Option<u8>,
     paths: &[PathBuf],
@@ -112,6 +156,9 @@ fn open_named(
                     colour,
                     palette,
                 );
+                if let Some((key, value)) = frame_blending_option(core, frame_blending) {
+                    opened.set_option(key, value);
+                }
                 if let Some(player) = link {
                     apply_link_options(&mut opened, core, player);
                 }
@@ -122,6 +169,20 @@ fn open_named(
         }
     }
     None
+}
+
+pub fn frame_blending_option(
+    core: Core,
+    blending: FrameBlending,
+) -> Option<(&'static str, &'static str)> {
+    (core == Core::Mgba).then_some((
+        "mgba_interframe_blending",
+        match blending {
+            FrameBlending::Off => "OFF",
+            FrameBlending::Smart => "mix_smart",
+            FrameBlending::GhostingFast => "lcd_ghosting_fast",
+        },
+    ))
 }
 
 pub fn palette_for(
@@ -258,6 +319,22 @@ mod tests {
         assert_eq!(
             colour_option(Core::Mgba, Platform::Gb, true),
             Some(("mgba_color_correction", "GBC"))
+        );
+    }
+
+    #[test]
+    fn m_gba_maps_each_frame_blending_mode_to_its_libretro_option() {
+        assert_eq!(
+            frame_blending_option(Core::Mgba, FrameBlending::Smart),
+            Some(("mgba_interframe_blending", "mix_smart"))
+        );
+        assert_eq!(
+            frame_blending_option(Core::Mgba, FrameBlending::GhostingFast),
+            Some(("mgba_interframe_blending", "lcd_ghosting_fast"))
+        );
+        assert_eq!(
+            frame_blending_option(Core::Gpsp, FrameBlending::Smart),
+            None
         );
     }
 
