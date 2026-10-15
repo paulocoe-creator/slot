@@ -505,6 +505,7 @@ impl Frontend {
         compositor.set_screen_power(self.session.app().screen_power());
         compositor.set_overlay_slide(self.session.app().overlay_slide());
         compositor.set_game_source_rect(self.session.app().source_rect());
+        compositor.set_game_picture_fits_panel(self.session.app().picture_fits_panel());
         self.grab_link_shot(compositor);
         compositor.begin_frame(self.session.app().layout());
         if self.draw_rebuild(compositor) {

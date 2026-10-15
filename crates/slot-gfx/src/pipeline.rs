@@ -30,6 +30,7 @@ pub struct GamePass {
     power: f32,
     fills: bool,
     src: [f32; 4],
+    picture_fits_panel: bool,
 }
 
 impl GamePass {
@@ -88,6 +89,7 @@ impl GamePass {
             power: 1.0,
             fills: false,
             src: WHOLE_TEXTURE,
+            picture_fits_panel: false,
         })
     }
 
@@ -98,7 +100,7 @@ impl GamePass {
     pub fn frame(&self) -> (f32, f32, f32, f32) {
         match self.fills {
             true => (0.0, 0.0, OUT_W as f32, OUT_H as f32),
-            false => screen_rect(self.power),
+            false => self.picture_rect(),
         }
     }
 
@@ -140,6 +142,10 @@ impl GamePass {
         self.src = rect;
     }
 
+    pub fn set_picture_fits_panel(&mut self, on: bool) {
+        self.picture_fits_panel = on;
+    }
+
     pub fn upload(&mut self, xrgb8888: &[u8]) {
         if xrgb8888.len() < (SRC_W * SRC_H * 4) as usize {
             return;
@@ -177,7 +183,7 @@ impl GamePass {
         let (x, y, w, h, bright) = if self.fills {
             (0.0, 0.0, OUT_W as f32, OUT_H as f32, 1.0)
         } else {
-            let (x, y, w, h) = screen_rect(self.power);
+            let (x, y, w, h) = self.picture_rect();
             (x, y, w, h, screen_brightness(self.power))
         };
         unsafe {
@@ -205,6 +211,31 @@ impl GamePass {
     }
 }
 
+impl GamePass {
+    fn picture_rect(&self) -> (f32, f32, f32, f32) {
+        let rect = screen_rect(self.power);
+        if !self.picture_fits_panel {
+            return rect;
+        }
+        fit_picture_rect(rect, self.src)
+    }
+}
+
+fn fit_picture_rect(
+    (mut x, mut y, mut w, mut h): (f32, f32, f32, f32),
+    src: [f32; 4],
+) -> (f32, f32, f32, f32) {
+    let aspect = src[2] * SRC_W as f32 / (src[3] * SRC_H as f32);
+    if w / h > aspect {
+        w = h * aspect;
+        x = (OUT_W as f32 - w) / 2.0;
+    } else {
+        h = w / aspect;
+        y = (OUT_H as f32 - h) / 2.0;
+    }
+    (x, y, w, h)
+}
+
 fn whole_scale_source(src: [f32; 4], fbo: [f32; 2]) -> [f32; 4] {
     let (x, w) = whole_scale(src[0], src[2], SRC_W as f32, OUT_W as f32 * fbo[0]);
     let (y, h) = whole_scale(src[1], src[3], SRC_H as f32, OUT_H as f32 * fbo[1]);
@@ -229,5 +260,21 @@ impl Drop for GamePass {
             gl::DeleteTextures(1, &self.paper);
             gl::DeleteProgram(self.prog);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::fit_picture_rect;
+
+    #[test]
+    fn a_game_boy_picture_fits_the_panel_without_integer_scaling() {
+        let (_, y, w, h) = fit_picture_rect(
+            (0.0, 0.0, 720.0, 480.0),
+            [40.0 / 240.0, 8.0 / 160.0, 160.0 / 240.0, 144.0 / 160.0],
+        );
+        assert_eq!(y, 0.0);
+        assert_eq!(h, 480.0);
+        assert!((w - 160.0 * 480.0 / 144.0).abs() < 0.001, "width was {w}");
     }
 }
