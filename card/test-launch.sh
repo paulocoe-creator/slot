@@ -3,6 +3,7 @@ set -eu
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT="$HERE/System/launch_frontend.sh"
+BASEOS_ENV="$HERE/System/baseos_env.sh"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT HUP INT TERM
 
@@ -10,6 +11,7 @@ setup() {
 	rm -rf "$TMP/card" "$TMP/run"
 	mkdir -p "$TMP/card/System" "$TMP/run"
 	: > "$TMP/card/System/led.sh"
+	cp "$BASEOS_ENV" "$TMP/card/System/baseos_env.sh"
 }
 
 launch() {
@@ -20,6 +22,31 @@ fail() {
 	echo "launch: $*" >&2
 	exit 1
 }
+
+grep -F '. "$SYS/baseos_env.sh"' "$SCRIPT" >/dev/null \
+	|| fail "the launcher no longer loads the BaseOS environment"
+grep -F 'export_baseos_target /etc/baseos-release' "$SCRIPT" >/dev/null \
+	|| fail "the launcher no longer exports the BaseOS target"
+
+release="$TMP/baseos-release"
+printf 'BASEOS_TARGET=rg34xx\nBASEOS_MODEL=rg34xx\n' > "$release"
+unset BASEOS_TARGET
+. "$BASEOS_ENV"
+export_baseos_target "$release"
+[ "${BASEOS_TARGET:-}" = "rg34xx" ] \
+	|| fail "the launcher did not export the target from baseos-release"
+
+printf 'BASEOS_TARGET=rg34xxsp\n' > "$release"
+unset BASEOS_TARGET
+export_baseos_target "$release"
+[ "${BASEOS_TARGET:-}" = "rg34xxsp" ] \
+	|| fail "the launcher changed the target it exported"
+
+printf 'BASEOS_MODEL=rg34xx\n' > "$release"
+unset BASEOS_TARGET
+export_baseos_target "$release"
+[ -z "${BASEOS_TARGET:-}" ] \
+	|| fail "the launcher exported a target that the release file did not declare"
 
 setup
 echo "old run" > "$TMP/card/slot.log"

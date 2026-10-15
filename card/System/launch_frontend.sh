@@ -6,6 +6,10 @@ LOGS="$SD/Logs"
 SESSION_MAX=65536
 export SLOT_ROOT="$SD"
 
+# BaseOS identifies the device here, but does not export the value to Slot.
+. "$SYS/baseos_env.sh"
+export_baseos_target /etc/baseos-release
+
 mkdir -p "$LOGS" 2>/dev/null
 for f in slot.log slot.log.1 slot-session.log slot-session.log.1 slot-card.log ags-shutdown-trace.log input-trace.log; do
 	[ -f "$SD/$f" ] && mv -f "$SD/$f" "$LOGS/$f"
