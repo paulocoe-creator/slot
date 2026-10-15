@@ -1823,8 +1823,7 @@ fn session_playing(root: &Path) -> Session {
     s
 }
 
-const GB_ACTUAL: [f32; 4] = [40.0 / 240.0, 8.0 / 160.0, 160.0 / 240.0, 144.0 / 160.0];
-const GB_STRETCH: [f32; 4] = [40.0 / 240.0, 0.0, 160.0 / 240.0, 1.0];
+const GB_PICTURE: [f32; 4] = [40.0 / 240.0, 8.0 / 160.0, 160.0 / 240.0, 144.0 / 160.0];
 
 fn pad(s: &Session) -> u16 {
     s.emu().expect("no core in the slot").input().0
@@ -1836,7 +1835,7 @@ fn l_and_r_change_the_mode_on_a_game_boy_cart_and_not_on_a_gba_one() {
     let mut s = session_playing(d.path());
     assert_eq!(
         s.app().source_rect(),
-        GB_ACTUAL,
+        GB_PICTURE,
         "it did not open actual size"
     );
     assert!(
@@ -1847,7 +1846,7 @@ fn l_and_r_change_the_mode_on_a_game_boy_cart_and_not_on_a_gba_one() {
     s.feed([RawEvent::Down(Btn::L1)], 100);
     assert_eq!(
         s.app().source_rect(),
-        GB_STRETCH,
+        GB_PICTURE,
         "L did not stretch the picture"
     );
     assert!(
@@ -1858,7 +1857,7 @@ fn l_and_r_change_the_mode_on_a_game_boy_cart_and_not_on_a_gba_one() {
     s.feed([RawEvent::Up(Btn::L1)], 120);
 
     s.feed([RawEvent::Down(Btn::R1)], 200);
-    assert_eq!(s.app().source_rect(), GB_ACTUAL, "R did not give it back");
+    assert_eq!(s.app().source_rect(), GB_PICTURE, "R did not give it back");
     assert_eq!(pad(&s) & ButtonMask::R, 0, "R reached the game as well");
     s.feed([RawEvent::Up(Btn::R1)], 220);
 
@@ -1955,12 +1954,12 @@ fn the_picture_mode_is_remembered_per_cart() {
     let mut s = session_playing(d.path());
     assert_eq!(
         s.app().source_rect(),
-        GB_STRETCH,
+        GB_PICTURE,
         "the cart did not come back stretched"
     );
     s.feed([RawEvent::Down(Btn::R1)], 100);
     assert_eq!(video_mode_for(d.path(), "Tetris"), VideoMode::Actual);
-    assert_eq!(s.app().source_rect(), GB_ACTUAL);
+    assert_eq!(s.app().source_rect(), GB_PICTURE);
 }
 
 #[test]
@@ -1975,7 +1974,7 @@ fn a_cart_with_no_line_reads_as_actual_size() {
     let s = session_playing(d.path());
     assert_eq!(
         s.app().source_rect(),
-        GB_ACTUAL,
+        GB_PICTURE,
         "a cart with no line did not open at actual size"
     );
 }

@@ -40,24 +40,18 @@ pub fn write_video_mode(root: &Path, stem: &str, mode: VideoMode) -> std::io::Re
     ini::write(root, VIDEO_MODE_FILE, stem, mode.as_str())
 }
 
-pub fn source_rect(platform: Platform, mode: VideoMode) -> [f32; 4] {
+pub fn source_rect(platform: Platform, _mode: VideoMode) -> [f32; 4] {
     let (w, h) = platform.picture();
     if (w, h) == (SRC_W, SRC_H) {
         return WHOLE_TEXTURE;
     }
     let x = SRC_W.saturating_sub(w) / 2;
-    let y = match mode {
-        VideoMode::Actual => SRC_H.saturating_sub(h) / 2,
-        VideoMode::Stretch => 0,
-    };
+    let y = SRC_H.saturating_sub(h) / 2;
     [
         x as f32 / SRC_W as f32,
         y as f32 / SRC_H as f32,
         w as f32 / SRC_W as f32,
-        match mode {
-            VideoMode::Actual => h as f32 / SRC_H as f32,
-            VideoMode::Stretch => 1.0,
-        },
+        h as f32 / SRC_H as f32,
     ]
 }
 
