@@ -213,6 +213,9 @@ pub struct SlotState {
     pub shader_gba: Shader,
     pub shader_gb: Shader,
     pub shader_gbc: Shader,
+    pub frame_blending_gba: FrameBlending,
+    pub frame_blending_gb: FrameBlending,
+    pub frame_blending_gbc: FrameBlending,
     pub eject_save: bool,
     pub turbo: bool,
     pub rewind: bool,
@@ -276,6 +279,42 @@ pub enum Shader {
     Simpletex,
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum FrameBlending {
+    Off,
+    Smart,
+    GhostingFast,
+}
+
+impl FrameBlending {
+    pub const GBA: [FrameBlending; 2] = [FrameBlending::Off, FrameBlending::Smart];
+    pub const GB: [FrameBlending; 2] = [FrameBlending::Off, FrameBlending::GhostingFast];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            FrameBlending::Off => "off",
+            FrameBlending::Smart => "smart",
+            FrameBlending::GhostingFast => "ghosting-fast",
+        }
+    }
+
+    pub fn parse(name: &str) -> Option<Self> {
+        Self::GBA
+            .into_iter()
+            .chain(Self::GB)
+            .find(|v| v.name() == name)
+    }
+
+    pub fn step(self, choices: &[FrameBlending], right: bool) -> Self {
+        let at = choices.iter().position(|&v| v == self).unwrap_or(0);
+        choices[if right {
+            (at + 1) % choices.len()
+        } else {
+            (at + choices.len() - 1) % choices.len()
+        }]
+    }
+}
+
 impl Shader {
     pub const GBA: [Shader; 4] = [Shader::Off, Shader::Lcd3x, Shader::Grid, Shader::Dot];
     pub const GB: [Shader; 4] = [Shader::Off, Shader::Lcd3x, Shader::Grid, Shader::Simpletex];
@@ -335,6 +374,9 @@ impl Default for SlotState {
             shader_gba: Shader::Grid,
             shader_gb: Shader::Simpletex,
             shader_gbc: Shader::Simpletex,
+            frame_blending_gba: FrameBlending::Off,
+            frame_blending_gb: FrameBlending::Off,
+            frame_blending_gbc: FrameBlending::Off,
             eject_save: true,
             turbo: true,
             rewind: true,
@@ -437,6 +479,12 @@ pub fn write_slot_state(root: &Path, s: &SlotState) -> std::io::Result<()> {
         s.colour_correction_gbc as u8
     ));
     text.push_str(&format!("shader_gbc={}\n", s.shader_gbc.name()));
+    text.push_str(&format!(
+        "frame_blending_gba={}\nframe_blending_gb={}\nframe_blending_gbc={}\n",
+        s.frame_blending_gba.name(),
+        s.frame_blending_gb.name(),
+        s.frame_blending_gbc.name()
+    ));
     text.push_str(&format!("wallpaper_tint={}\n", s.wallpaper_tint.key()));
     text.push_str(&format!("show_recents={}\n", s.show_recents as u8));
     text.push_str(&format!("show_titles={}\n", s.show_titles as u8));
@@ -478,6 +526,9 @@ fn parse(text: &str) -> Option<SlotState> {
     let mut shader_gba = None;
     let mut shader_gb = None;
     let mut shader_gbc = None;
+    let mut frame_blending_gba = None;
+    let mut frame_blending_gb = None;
+    let mut frame_blending_gbc = None;
     let mut eject_save = None;
     let mut turbo = None;
     let mut rewind = None;
@@ -535,6 +586,18 @@ fn parse(text: &str) -> Option<SlotState> {
             "shelf_cart" => shelf_cart = recent_value(value),
             "shader_gb" => shader_gb = Shader::parse(value).filter(|s| Shader::GB.contains(s)),
             "shader_gbc" => shader_gbc = Shader::parse(value).filter(|s| Shader::GB.contains(s)),
+            "frame_blending_gba" => {
+                frame_blending_gba =
+                    FrameBlending::parse(value).filter(|v| FrameBlending::GBA.contains(v))
+            }
+            "frame_blending_gb" => {
+                frame_blending_gb =
+                    FrameBlending::parse(value).filter(|v| FrameBlending::GB.contains(v))
+            }
+            "frame_blending_gbc" => {
+                frame_blending_gbc =
+                    FrameBlending::parse(value).filter(|v| FrameBlending::GB.contains(v))
+            }
             _ => {}
         }
     }
@@ -567,6 +630,11 @@ fn parse(text: &str) -> Option<SlotState> {
         shader_gba: shader_gba.unwrap_or(fallback.shader_gba),
         shader_gb: shader_gb.unwrap_or(fallback.shader_gb),
         shader_gbc: shader_gbc.or(shader_gb).unwrap_or(fallback.shader_gbc),
+        frame_blending_gba: frame_blending_gba.unwrap_or(fallback.frame_blending_gba),
+        frame_blending_gb: frame_blending_gb.unwrap_or(fallback.frame_blending_gb),
+        frame_blending_gbc: frame_blending_gbc
+            .or(frame_blending_gb)
+            .unwrap_or(fallback.frame_blending_gbc),
         eject_save: eject_save.unwrap_or(fallback.eject_save),
         turbo: turbo.unwrap_or(fallback.turbo),
         rewind: rewind.unwrap_or(fallback.rewind),

@@ -7,9 +7,9 @@ use slot_input::{Action, Btn, MENU_DOUBLE_TAP_MS, MUTE_CHORD_MS};
 use slot_power::{Battery, Charge, LedState, LidPolicy, Power};
 use slot_retro::LinkChannel;
 use slot_store::{
-    format_stamp, read_slot_state, scan, write_slot_state, BezelPick, Cart, Core, GbPalette,
-    Platform, Recent, Shader, SlotState, StateEntry, StateRing, WallpaperPick, WallpaperTint,
-    BLUE_LIGHT_MAX, BRIGHTNESS_MAX, FF_SPEEDS, RING_MAX, RUN_AHEAD_MAX, VOLUME_MAX,
+    format_stamp, read_slot_state, scan, write_slot_state, BezelPick, Cart, Core, FrameBlending,
+    GbPalette, Platform, Recent, Shader, SlotState, StateEntry, StateRing, WallpaperPick,
+    WallpaperTint, BLUE_LIGHT_MAX, BRIGHTNESS_MAX, FF_SPEEDS, RING_MAX, RUN_AHEAD_MAX, VOLUME_MAX,
 };
 use slot_ui::{
     board_from, board_x, board_zoom, draw_empty_slot, draw_footer, draw_ground, draw_slot_name,
@@ -346,6 +346,7 @@ pub struct App {
     snapshot: Option<Box<dyn Snapshot>>,
     core: Core,
     colour_pending: Option<bool>,
+    frame_blending_pending: Option<FrameBlending>,
     palette_live: bool,
     palette_pending: Option<GbPalette>,
     link_player: Option<u8>,
@@ -497,6 +498,7 @@ impl App {
             snapshot: None,
             core: Core::default(),
             colour_pending: None,
+            frame_blending_pending: None,
             palette_live: false,
             palette_pending: None,
             link_player: None,
@@ -858,6 +860,9 @@ impl App {
             (QuickRow::ColourCorrection, Platform::Gba) => QuickRow::GbaColourCorrection,
             (QuickRow::ColourCorrection, Platform::Gb) => QuickRow::GbColourCorrection,
             (QuickRow::ColourCorrection, Platform::Gbc) => QuickRow::GbcColourCorrection,
+            (QuickRow::FrameBlending, Platform::Gba) => QuickRow::GbaFrameBlending,
+            (QuickRow::FrameBlending, Platform::Gb) => QuickRow::GbFrameBlending,
+            (QuickRow::FrameBlending, Platform::Gbc) => QuickRow::GbcFrameBlending,
             (QuickRow::Bezel, Platform::Gba) => QuickRow::GbaBezel,
             (QuickRow::Bezel, Platform::Gb) => QuickRow::GbBezel,
             (QuickRow::Bezel, Platform::Gbc) => QuickRow::GbcBezel,
@@ -867,7 +872,7 @@ impl App {
 
     pub fn quick_value(&self, row: QuickRow) -> Option<QuickValue> {
         match row {
-            QuickRow::Shader | QuickRow::ColourCorrection => {
+            QuickRow::Shader | QuickRow::ColourCorrection | QuickRow::FrameBlending => {
                 self.quick_value(self.playing_row(row))
             }
             QuickRow::FastForward => QuickValue::speed(self.state.ff_speed),
@@ -879,6 +884,9 @@ impl App {
             QuickRow::GbcColourCorrection => {
                 Some(QuickValue::flag(self.state.colour_correction_gbc))
             }
+            QuickRow::GbaFrameBlending => Some(frame_blending_value(self.state.frame_blending_gba)),
+            QuickRow::GbFrameBlending => Some(frame_blending_value(self.state.frame_blending_gb)),
+            QuickRow::GbcFrameBlending => Some(frame_blending_value(self.state.frame_blending_gbc)),
             QuickRow::GbPalettes => Some(QuickValue::flag(self.state.gb_palettes)),
             QuickRow::GbaShader => Some(shader_value(self.state.shader_gba)),
             QuickRow::GbShader => Some(shader_value(self.state.shader_gb)),
@@ -1649,6 +1657,18 @@ impl App {
         }
     }
 
+    pub fn frame_blending_for(&self, platform: Platform) -> FrameBlending {
+        match platform {
+            Platform::Gba => self.state.frame_blending_gba,
+            Platform::Gb => self.state.frame_blending_gb,
+            Platform::Gbc => self.state.frame_blending_gbc,
+        }
+    }
+
+    pub fn take_frame_blending(&mut self) -> Option<FrameBlending> {
+        self.frame_blending_pending.take()
+    }
+
     pub fn light(&self) -> bool {
         self.state.appearance.light()
     }
@@ -2035,6 +2055,9 @@ impl App {
             | QuickRow::GbaColourCorrection
             | QuickRow::GbColourCorrection
             | QuickRow::GbcColourCorrection
+            | QuickRow::GbaFrameBlending
+            | QuickRow::GbFrameBlending
+            | QuickRow::GbcFrameBlending
             | QuickRow::GbaShader
             | QuickRow::GbShader
             | QuickRow::GbcShader
@@ -2054,6 +2077,7 @@ impl App {
             | QuickRow::PlayGameplay
             | QuickRow::Shader
             | QuickRow::ColourCorrection
+            | QuickRow::FrameBlending
             | QuickRow::Palette
             | QuickRow::GbBezel
             | QuickRow::GbcBezel
@@ -2122,6 +2146,18 @@ impl App {
                 s.colour_correction_gbc = !s.colour_correction_gbc;
                 self.colour_pending = Some(self.colour_correction());
             }
+            QuickRow::GbaFrameBlending => {
+                s.frame_blending_gba = s.frame_blending_gba.step(&FrameBlending::GBA, right);
+                self.frame_blending_pending = Some(s.frame_blending_gba);
+            }
+            QuickRow::GbFrameBlending => {
+                s.frame_blending_gb = s.frame_blending_gb.step(&FrameBlending::GB, right);
+                self.frame_blending_pending = Some(s.frame_blending_gb);
+            }
+            QuickRow::GbcFrameBlending => {
+                s.frame_blending_gbc = s.frame_blending_gbc.step(&FrameBlending::GB, right);
+                self.frame_blending_pending = Some(s.frame_blending_gbc);
+            }
             QuickRow::GbaShader => {
                 let to = s.shader_gba.step(&Shader::GBA, right);
                 if to == s.shader_gba {
@@ -2170,6 +2206,7 @@ impl App {
             | QuickRow::PlayGameplay
             | QuickRow::Shader
             | QuickRow::ColourCorrection
+            | QuickRow::FrameBlending
             | QuickRow::Palette
             | QuickRow::ScreenGba
             | QuickRow::ScreenGbc
@@ -4461,6 +4498,14 @@ fn shader_value(shader: Shader) -> QuickValue {
         Shader::Grid => QuickValue::Grid,
         Shader::Dot => QuickValue::Dot,
         Shader::Simpletex => QuickValue::Simpletex,
+    }
+}
+
+fn frame_blending_value(value: FrameBlending) -> QuickValue {
+    match value {
+        FrameBlending::Off => QuickValue::Off,
+        FrameBlending::Smart => QuickValue::Smart,
+        FrameBlending::GhostingFast => QuickValue::Ghosting,
     }
 }
 
