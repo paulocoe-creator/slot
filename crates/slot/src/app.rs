@@ -437,6 +437,10 @@ fn shelves_of(carts: Vec<Cart>) -> Vec<(Rack, Shelf)> {
 
 impl App {
     pub fn new(carts: Vec<Cart>) -> Self {
+        Self::new_with_radio(carts, radio_jobs())
+    }
+
+    fn new_with_radio(carts: Vec<Cart>, radio: Box<dyn RadioJobs>) -> Self {
         let shelves = shelves_of(carts);
         let shelf_at = shelves
             .iter()
@@ -444,8 +448,8 @@ impl App {
             .unwrap_or(0);
         let state_writer = crate::state_writer::StateWriter::spawn();
         let card_writes = state_writer.card_writes();
-        App {
-            radio: radio_jobs(),
+        let mut app = App {
+            radio,
             state_writer,
             phase: Phase::Shelf,
             shelves,
@@ -552,7 +556,11 @@ impl App {
             battery: None,
             last_led: None,
             powering_off: false,
-        }
+        };
+        // BaseOS owns the Wi-Fi driver, but Slot Link Play owns whether its radio
+        // is available. Start every Slot session in the low-power, soft-blocked state.
+        app.radio.ask(RadioJob::Cool);
+        app
     }
 
     pub fn boot(root: &Path) -> Self {
@@ -4557,5 +4565,32 @@ fn bezel_slot(platform: Platform) -> usize {
         Platform::Gba => 0,
         Platform::Gb => 1,
         Platform::Gbc => 2,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use super::*;
+
+    #[derive(Clone, Default)]
+    struct RadioLog(Arc<Mutex<Vec<RadioJob>>>);
+
+    impl RadioJobs for RadioLog {
+        fn ask(&mut self, job: RadioJob) {
+            self.0.lock().unwrap().push(job);
+        }
+
+        fn warmed(&self) -> bool {
+            false
+        }
+    }
+
+    #[test]
+    fn a_new_app_starts_with_the_radio_cooled() {
+        let log = RadioLog::default();
+        let _app = App::new_with_radio(Vec::new(), Box::new(log.clone()));
+        assert_eq!(*log.0.lock().unwrap(), vec![RadioJob::Cool]);
     }
 }

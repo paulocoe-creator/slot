@@ -13,7 +13,7 @@ LINK_WAIT_S="${AGS_LINK_WAIT_S:-10}"
 LINK_PIN_WAIT_S="${AGS_LINK_PIN_WAIT_S:-20}"
 LINK_RESCAN="${AGS_LINK_RESCAN:-2}"
 LINK_AP_GLOBAL="${AGS_LINK_AP_GLOBAL:-}"
-LINK_TRACE="${AGS_LINK_TRACE:-}"
+LINK_TRACE="${AGS_LINK_TRACE:-/mnt/sdcard/Logs/slotlink.log}"
 LINK_MARK="$RUN/slotlink.session"
 
 WPA_SUPPLICANT="${AGS_WPA_SUPPLICANT:-wpa_supplicant}"
@@ -28,6 +28,13 @@ trace() {
 	return 0
 }
 
+radio_state() {
+	rfkill=$(rfkill list 2>/dev/null | tr '\n' ' ')
+	wlan0=$($IP link show wlan0 2>/dev/null | tr '\n' ' ')
+	wlan1=$($IP link show wlan1 2>/dev/null | tr '\n' ' ')
+	trace "$1: rfkill=${rfkill:-unavailable}; wlan0=${wlan0:-missing}; wlan1=${wlan1:-missing}"
+}
+
 wait_dev() {
 	w=0
 	while [ ! -d "$NET/$1" ] && [ "$w" -lt "$2" ]; do
@@ -38,10 +45,19 @@ wait_dev() {
 }
 
 wifi_up() {
-	wait_dev wlan0 40 || return 0
-	trace "wlan0 present"
+	trace "wifi: enabling"
 	rfkill unblock wifi 2>/dev/null || true
+	wait_dev wlan0 40 || return 0
 	$IP link set wlan0 up 2>/dev/null || true
+	radio_state "wifi: enabled"
+}
+
+wifi_down() {
+	trace "wifi: disabling"
+	$IP link set wlan1 down 2>/dev/null || true
+	$IP link set wlan0 down 2>/dev/null || true
+	rfkill block wifi 2>/dev/null || true
+	radio_state "wifi: disabled"
 }
 
 supplicant_stop() {
@@ -181,7 +197,7 @@ link_join() {
 link_down() {
 	trace "down"
 	link_clear
-	$IP link set wlan1 down 2>/dev/null || true
+	wifi_down
 	rmdir "$RUN/wpa_ap" 2>/dev/null || true
 	/bin/rm -f "$LINK_MARK"
 	return 0
@@ -199,7 +215,7 @@ case "${1:-} ${2:-}" in
 "link join") link_join ;;
 "link down") link_down ;;
 "link warm") link_warm ;;
-"link cool") exit 0 ;;
+"link cool") link_down ;;
 *)
 	echo "usage: slotlink.sh link [host|join|down|warm|cool]" >&2
 	exit 2

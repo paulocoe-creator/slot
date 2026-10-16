@@ -37,6 +37,7 @@ reset() {
 	make_fake wpa_cli "$TMP/cli.log" 'echo "wpa_state=${FAKE_STATE:-COMPLETED}"'
 	make_fake wpa_supplicant "$TMP/sup.log"
 	make_fake ip "$TMP/ip.log"
+	make_fake rfkill "$TMP/rfkill.log"
 	make_fake insmod "$TMP/mod.log"
 	make_fake legacy "$TMP/legacy.log"
 }
@@ -47,7 +48,7 @@ run() {
 		AGS_MODULES="$TMP/modules" AGS_NET_SYS="$TMP/net" AGS_RUN="$TMP/run" \
 		AGS_CTRL_DIR="$TMP/ctrl" AGS_PROC_MODULES="$TMP/proc-modules" \
 		AGS_WPA_SUPPLICANT="$TMP/bin/wpa_supplicant" AGS_WPA_CLI="$TMP/bin/wpa_cli" \
-		AGS_IP="$TMP/bin/ip" AGS_INSMOD="$TMP/bin/insmod" \
+		AGS_IP="$TMP/bin/ip" AGS_INSMOD="$TMP/bin/insmod" AGS_LINK_TRACE="$TMP/trace.log" \
 		AGS_LINK_WAIT_S="${WAIT_S:-1}" AGS_LINK_PIN_WAIT_S="${WAIT_S:-1}" \
 		sh "$SCRIPT" "$@"
 }
@@ -88,15 +89,24 @@ run absent link down && rc=0 || rc=$?
 for f in slotlink-ap.conf slotlink-sta.conf slotlink.session; do
 	[ -e "$TMP/run/$f" ] && fail "down left $f"
 done
+grep -q 'block wifi' "$TMP/rfkill.log" || fail "down did not soft-block WiFi"
+grep -q 'link set wlan0 down' "$TMP/ip.log" || fail "down left wlan0 up"
+grep -q 'link set wlan1 down' "$TMP/ip.log" || fail "down left wlan1 up"
+grep -q 'wifi: disabled:' "$TMP/trace.log" || fail "down did not record the disabled radio state"
 
 reset yes
 run absent link cool && rc=0 || rc=$?
 [ "$rc" = 0 ] || fail "cool exited $rc"
 [ -e "$TMP/mod.log" ] && fail "cool touched the driver"
+grep -q 'block wifi' "$TMP/rfkill.log" || fail "cool did not soft-block WiFi"
+grep -q 'link set wlan0 down' "$TMP/ip.log" || fail "cool left wlan0 up"
 
 reset no
 run absent link warm >/dev/null || true
 [ -e "$TMP/mod.log" ] && fail "insmod on BaseOS"
+grep -q 'unblock wifi' "$TMP/rfkill.log" || fail "warm did not soft-unblock WiFi"
+grep -q 'link set wlan0 up' "$TMP/ip.log" || fail "warm did not bring wlan0 up"
+grep -q 'wifi: enabled:' "$TMP/trace.log" || fail "warm did not record the enabled radio state"
 
 reset yes
 make_fake wpa_cli "$TMP/cli.log" 'sleep 0.3' 'echo "wpa_state=SCANNING"'
